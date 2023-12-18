@@ -138,5 +138,5 @@ desvest<-sqrt(t(diag(var(completed_matrix))))
 list(Giterations=stabilityiter,Gconvergence=stabilitycrit,Glambda=lambda,Gimputations=completed_matrix)
 }### END OF Gabriel.Calinski function
 
-#X<-matrix(scan('C:/Users/sarci/Desktop/KRegularised/Krzanowski(1988).txt'), ncol=5, byrow=T) # Import the data set 
+#X<-matrix(scan('path-addressi.csv'), ncol=5, byrow=T) # Import the data set 
 #imputation<-Gabriel.Calinski(X, lambda=0.9)
