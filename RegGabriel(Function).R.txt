@@ -1,0 +1,142 @@
+###########################################
+###															     		     	
+##Missing value imputation 
+##using a regularised SVD 
+##in GabrielEigen system 	               	           
+###															                 
+###########################################
+
+######################
+###		Regularised SVD
+######################
+regSVD18<-function(Kmiss,rank,lambda){
+
+rownum<-nrow(Kmiss)
+colnum<-ncol(Kmiss)
+Vrandmatrix<-matrix(runif(rank*colnum), nrow=colnum, ncol=rank)
+V<-Vrandmatrix
+J1_zero<-0
+iter<-0
+Epsilon<-1
+
+while(Epsilon>0.001 & iter<=20){
+iter<-iter+1
+#print(iter)
+U<-Kmiss%*%V%*%ginv(t(V)%*%V+lambda*diag(rank))
+V<-t(Kmiss)%*%U%*%ginv(t(U)%*%U+lambda*diag(rank))
+regSVD<-U%*%t(V)
+J1<-(norm(Kmiss-regSVD, "F")^2) + (lambda*(norm(U,"F")^2)) + (lambda*(norm(V,"F")^2))
+Epsilon<-abs(J1-J1_zero)
+J1_zero<-J1
+#print(Epsilon)
+}
+regulSVD<-svd(regSVD)
+
+## Create the result object
+  ret2 <- list()
+
+  ret2$d <- regulSVD$d
+  ret2$u <- regulSVD$u
+  ret2$v <- regulSVD$v
+  ret2$rank<-rank
+  ret2$lambda<-lambda	
+  ret2$iter<-iter-1
+  ret2$Epsilon<-Epsilon
+  return(ret2)
+
+} ### End of function regSVD18
+
+######################
+###		Function for regularised GabrielEigen
+###		X: Incomplete matrix
+###		lambda: Regularization parameter
+###		The regularised imputation function is Gabriel.Calinski
+######################
+
+Gabriel.Calinski<-function(X,lambda){
+nfilasX<-nrow(X) 
+ncolX<-ncol(X)
+if(ncolX>nfilasX) {X<-t(X)}
+library(MASS)### Package for ginv
+XMISSING<-X
+is.matrix(X) # Ask if the data are matrix type
+totalelementos<-nfilasX*ncolX
+
+indicamissing<-is.na(XMISSING)# indicate the occurrence of missing in the matrix
+indicadora<-indicamissing*1
+totalfaltantes<-sum(indicadora)
+medcol<-t(matrix(colMeans(XMISSING, na.rm=TRUE))) # Calculates mean by columns without taking into account missing data
+
+posicfaltantes<-matrix(0,totalfaltantes,2)
+indi3<-0
+for (indi1 in 1:nfilasX){
+	for(indi2 in 1:ncolX){
+		if (indicadora[indi1,indi2]==1){
+		indi3<-indi3+1
+		posicfaltantes[indi3,1]=indi1
+		posicfaltantes[indi3,2]=indi2
+	      XMISSING[indi1,indi2]=medcol[1,indi2]
+		} # END OF if (indicadora[indi1,indi2] 
+	}# END OF for(indi2 in 1:ncolX)
+} # END OF for (indi1 in 1:nfilasX)
+
+completed_matrix<-XMISSING
+maxiter<-1000
+iter<-0
+desvest<-sqrt(t(diag(var(XMISSING))))
+Xmissingestand<-scale(XMISSING)
+Prediction_Gabriel<-matrix(0,nfilasX,ncolX)
+epsilon<-0.001
+stabilitycrit<-1
+stabilityiter<-0
+
+while (stabilitycrit>epsilon & stabilityiter<=20){
+stabilityiter<-stabilityiter+1
+
+	for (i1 in 1:totalfaltantes){
+
+		posic_linha<-posicfaltantes[i1,1]
+		posic_col<-posicfaltantes[i1,2]
+		auxiliar1<-rbind(Xmissingestand[posic_linha,],Xmissingestand[-posic_linha,])
+		auxiliar2<-cbind(auxiliar1[,posic_col],auxiliar1[,-posic_col]) 
+		Y1puntoTRANS<-auxiliar2[1,2:ncolX]
+		Ypunto1<-auxiliar2[2:nfilasX,1]
+		Ybarra11<-auxiliar2[-1,-1]	
+		
+		Ybarra11_Estand<-scale(Ybarra11)
+		dvs_Ybarra11_Estand<-regSVD18(Ybarra11_Estand,rank=ncol(Ybarra11_Estand),lambda)
+		autovalores<-matrix(dvs_Ybarra11_Estand$d)**2
+		sum_autovalores<-sum(autovalores)
+		CritCalinski1<-(autovalores/sum_autovalores)
+		CritCalinski2<-matrix(cumsum(CritCalinski1))
+		CritCalinski3<-matrix(1,ncol(Ybarra11_Estand),1)
+		for (Calins in 1:ncol(Ybarra11_Estand)){
+			if (CritCalinski2[Calins,1]>0.70){CritCalinski3[Calins,1]=0}
+		} # FIN de for (Calins in 1:ncol(Ybarra11_Estand)){
+		f<-sum(CritCalinski3)+1
+
+		dvs.Ybarra11<-regSVD18(Ybarra11, rank=ncol(Ybarra11), lambda)
+		u_Ybarra11<-dvs.Ybarra11$u
+		v_Ybarra11<-dvs.Ybarra11$v
+		d_Ybarra11<-diag(dvs.Ybarra11$d)
+
+		pred_estand<-Y1puntoTRANS%*%v_Ybarra11[,1:f]%*%ginv(d_Ybarra11[1:f,1:f])%*%t(u_Ybarra11[,1:f])%*%Ypunto1
+		completed_matrix[posic_linha,posic_col]<-medcol[1,posic_col]+(pred_estand*desvest[1,posic_col])
+		
+	} ###END OF for (i1 in 1:totalfaltantes){
+
+stabilitycrit1<-sqrt(  (1/totalfaltantes)*(sum((completed_matrix-XMISSING)**2))  )
+stabilitycrit2<-sqrt( (1/(totalelementos-totalfaltantes))*(sum((XMISSING*(1-indicadora))**2))  )
+stabilitycrit<-stabilitycrit1/stabilitycrit2
+XMISSING<-completed_matrix
+Xmissingestand<-scale(completed_matrix)
+medcol<-t(matrix(colMeans(completed_matrix)))
+desvest<-sqrt(t(diag(var(completed_matrix))))
+
+}### END OF while (stabilitycrit>epsilon & stabilityiter<=20){
+
+list(Giterations=stabilityiter,Gconvergence=stabilitycrit,Glambda=lambda,Gimputations=completed_matrix)
+}### END OF Gabriel.Calinski function
+
+#X<-matrix(scan('C:/Users/sarci/Desktop/KRegularised/Krzanowski(1988).txt'), ncol=5, byrow=T) # Import the data set 
+#imputation<-Gabriel.Calinski(X, lambda=0.9)
